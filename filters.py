@@ -79,6 +79,14 @@ CE102_LIMIT_DBUV = np.array([94.0, 60.0, 60.0, 60.0])
 NOISE_SRC_AT_10K = 110.0   
 NOISE_SRC_AT_10M = 40.0    
 
+NUM_DEVICES = 3
+NUM_HARMONICS = 4
+DEVICE_COLORS = ["orange", "cyan", "magenta"]
+DEVICE_LABELS = ["Dev 1", "Dev 2", "Dev 3"]
+
+DEVICE_INIT_FREQS = [100e3, 500e3, 1e6]   
+DEVICE_DEFAULT_AMP = 60.0
+
 def noise_source_dbuv(freqs, lvl_10k, lvl_10m):
     logf = np.log10(freqs)
     lf0, lf1 = np.log10(FREQ_START), np.log10(FREQ_STOP)
@@ -207,6 +215,13 @@ class CE102App(tk.Tk):
         self.pil_img = None
         self.noise_10k = NOISE_SRC_AT_10K
         self.noise_10m = NOISE_SRC_AT_10M
+        self.device_freqs = list(DEVICE_INIT_FREQS)
+        self.device_freq_entries = []
+        self.device_enabled = [True] * NUM_DEVICES
+        self.device_check_vars = []
+        self.device_amplitudes = [DEVICE_DEFAULT_AMP] * NUM_DEVICES
+        self.device_amp_entries = []
+        self.device_amp_labels = []
 
         self.load_values()
 
@@ -303,18 +318,28 @@ class CE102App(tk.Tk):
         # -------------------------------------------------------
         # LEFT COLUMN (Schematic Top, Params Bottom)
         # -------------------------------------------------------
-        left_col = ttk.Frame(outer)
+        schem_w = int(Image.open(SCHEMATIC_PATH).size[0] * IMG_SCALE)
+        left_col = ttk.Frame(outer, width=schem_w)
         left_col.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 16))
+        left_col.pack_propagate(False)
 
-        # 1. Schematic Panel
-        schem_hdr = ttk.Label(left_col, text="Schematic (SCH.png)", font=("Segoe UI", 11, "bold"))
-        schem_hdr.pack(anchor="w", pady=(0, 4))
+        # 1. Schematic Panel (card)
+        schem_card = ttk.LabelFrame(left_col, text=" Schematic ", padding=(8, 6))
+        schem_card.pack(anchor="w", fill="x", pady=(0, 12))
 
-        self.schem_canvas = tk.Canvas(left_col, bg="white", highlightthickness=0)
-        self.schem_canvas.pack(anchor="nw", pady=(0, 12))
+        self.schem_canvas = tk.Canvas(schem_card, bg="white", highlightthickness=1,
+                                      highlightbackground="#cccccc")
+        self.schem_canvas.pack(anchor="nw")
 
-        # 2. Component Parameter Tables
-        params_panel = ttk.Frame(left_col)
+        # 2+3. Component Parameters & Simulation Parameters (side by side)
+        lower_row = ttk.Frame(left_col)
+        lower_row.pack(anchor="w", fill="x")
+
+        # 2. Component Parameter Tables (card)
+        params_card = ttk.LabelFrame(lower_row, text=" Component Parameters ", padding=(8, 6))
+        params_card.pack(side=tk.LEFT, anchor="n", fill="y")
+
+        params_panel = ttk.Frame(params_card)
         params_panel.pack(anchor="nw")
 
         col_configs = [
@@ -338,16 +363,28 @@ class CE102App(tk.Tk):
                 ent.bind("<Return>", lambda e, n=name: self._on_edit(n))
                 ent.bind("<FocusOut>", lambda e, n=name: self._on_edit(n))
                 self.entries[name] = ent
-                
-        ttk.Separator(left_col, orient='horizontal').pack(fill='x', pady=15)
 
-        # 3. Noise-source reference textboxes & Save button 
-        noise_frame = ttk.Frame(left_col)
-        noise_frame.pack(anchor="w", pady=(0, 0))
-        
+        # vertical separator between the two cards
+        ttk.Separator(lower_row, orient="vertical").pack(side=tk.LEFT, fill="y", padx=14)
+
+        # 3. Card panel: noise reference, device frequencies & save button
+        card = ttk.LabelFrame(lower_row, text=" Simulation Parameters ",
+                              padding=(10, 8))
+        card.pack(side=tk.LEFT, anchor="n")
+
+        inner = ttk.Frame(card)
+        inner.pack(fill="x")
+
+        # top row: noise reference (left) + save button (right)
+        top_row = ttk.Frame(inner)
+        top_row.pack(fill="x", pady=(0, 8))
+
+        noise_frame = ttk.Frame(top_row)
+        noise_frame.pack(side=tk.LEFT, anchor="n", padx=(0, 12))
+
         ttk.Label(noise_frame, text="Assumed EUT noise reference (dBuV):", font=("Segoe UI", 9, "bold")).grid(
             row=0, column=0, columnspan=3, sticky="w", pady=(0, 6))
-        
+
         ttk.Label(noise_frame, text="at 10 kHz:").grid(row=1, column=0, sticky="e", padx=(0, 4))
         self.noise_10k_entry = ttk.Entry(noise_frame, width=8)
         self.noise_10k_entry.insert(0, str(self.noise_10k))
@@ -362,33 +399,88 @@ class CE102App(tk.Tk):
         self.noise_10m_entry.bind("<Return>", self._on_noise_edit)
         self.noise_10m_entry.bind("<FocusOut>", self._on_noise_edit)
 
-        ttk.Button(noise_frame, text="Save Results", command=self.save_images, width=12).grid(row=1, column=2, rowspan=2, padx=(20, 0), sticky="ns")
+        ttk.Separator(inner, orient="horizontal").pack(fill="x", pady=(0, 8))
+
+        # device frequency panel (below noise)
+        dev_frame = ttk.Frame(inner)
+        dev_frame.pack(anchor="w")
+
+        ttk.Label(dev_frame, text="Connected device frequencies:",
+                  font=("Segoe UI", 9, "bold")).grid(
+            row=0, column=0, columnspan=6, sticky="w", pady=(0, 4))
+
+        for i in range(NUM_DEVICES):
+            amp_entry = ttk.Entry(dev_frame, width=6, justify="center")
+            amp_entry.insert(0, f"{self.device_amplitudes[i]:g}")
+            amp_entry.grid(row=i + 1, column=0, sticky="w", padx=(0, 4))
+            amp_entry.bind("<Return>", lambda e, idx=i: self._on_device_amp_edit(idx))
+            amp_entry.bind("<FocusOut>", lambda e, idx=i: self._on_device_amp_edit(idx))
+            self.device_amp_entries.append(amp_entry)
+            amp_label = ttk.Label(dev_frame, text="dBuV", anchor="e")
+            amp_label.grid(row=i + 1, column=1, sticky="w", padx=(0, 8))
+            self.device_amp_labels.append(amp_label)
+            lbl = ttk.Label(dev_frame, text=f"{DEVICE_LABELS[i]}:", anchor="e")
+            lbl.grid(row=i + 1, column=2, sticky="e", padx=(0, 4))
+            freq_entry = ttk.Entry(dev_frame, width=8, justify="center")
+            freq_entry.insert(0, f"{DEVICE_INIT_FREQS[i] / 1e3:g}")
+            freq_entry.grid(row=i + 1, column=3, sticky="w", padx=(0, 3))
+            freq_entry.bind("<Return>", lambda e, idx=i: self._on_device_freq_edit(idx))
+            freq_entry.bind("<FocusOut>", lambda e, idx=i: self._on_device_freq_edit(idx))
+            self.device_freq_entries.append(freq_entry)
+            unit_label = ttk.Label(dev_frame, text="kHz", anchor="e")
+            unit_label.grid(row=i + 1, column=4, sticky="w", padx=(0, 8))
+            check_var = tk.BooleanVar(value=self.device_enabled[i])
+            check = ttk.Checkbutton(dev_frame, text="Show", variable=check_var,
+                                    command=lambda idx=i: self._on_device_check(idx))
+            check.grid(row=i + 1, column=5, sticky="w")
+            self.device_check_vars.append(check_var)
+
+        ttk.Separator(left_col, orient='horizontal').pack(fill='x', pady=12)
+
+        # Save button at the very bottom of the left column
+        self.save_button = ttk.Button(left_col, text="Save Results",
+                                      command=self.save_images, width=14)
+        self.save_button.pack(anchor="e", pady=(0, 0))
 
         # -------------------------------------------------------
-        # RIGHT COLUMN (Graph spanning full height)
+        # RIGHT COLUMN (Graph spanning full height) - card
         # -------------------------------------------------------
         right_col = ttk.Frame(outer)
         # Expand=True ve fill=BOTH ile tüm yüksekliği doldurur
         right_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        hdr2 = ttk.Label(right_col, text="Filter Response  (CE102, 10 kHz - 10 MHz)", font=("Segoe UI", 11, "bold"))
-        hdr2.pack(anchor="w", pady=(0, 2))
+        plot_card = ttk.LabelFrame(right_col, text=" Filter Response (CE102, 10 kHz - 10 MHz) ",
+                                   padding=(8, 6))
+        plot_card.pack(fill=tk.BOTH, expand=True)
 
-        self.plot_frame = ttk.Frame(right_col)
+        self.plot_frame = ttk.Frame(plot_card)
         self.plot_frame.pack(fill=tk.BOTH, expand=True)
 
 
     # ---------------------------------------------------------------
     def _draw_schematic(self):
-        self.pil_img_orig = Image.open(SCHEMATIC_PATH).convert("RGB")
+        img = Image.open(SCHEMATIC_PATH)
+        if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+            img = img.convert("RGBA")
+            bg = Image.new("RGBA", img.size, (255, 255, 255, 255))
+            img = Image.alpha_composite(bg, img)
+
+        self.pil_img_orig = img.convert("RGB")
+
+        arr = np.array(self.pil_img_orig).astype(np.int32)
+        dist = np.abs(arr - np.array([255, 252, 248]))
+        bg_mask = (dist.sum(axis=2) <= 24)
+        arr[bg_mask] = [255, 255, 255]
+        self.pil_img_orig = Image.fromarray(arr.astype(np.uint8), "RGB")
+
         w_orig, h_orig = self.pil_img_orig.size
-        
+
         new_w = int(w_orig * IMG_SCALE)
         new_h = int(h_orig * IMG_SCALE)
-        
+
         self.pil_img = self.pil_img_orig.resize((new_w, new_h), Image.Resampling.LANCZOS if hasattr(Image, 'Resampling') else Image.LANCZOS)
         self.schem_image_ref = ImageTk.PhotoImage(self.pil_img)
-        
+
         self.schem_canvas.delete("all")
         self.schem_canvas.config(width=new_w, height=new_h)
         self.schem_canvas.create_image(0, 0, anchor="nw", image=self.schem_image_ref)
@@ -462,6 +554,46 @@ class CE102App(tk.Tk):
         self.noise_10k, self.noise_10m = v10k, v10m
         self.recalculate()
 
+    def _on_device_freq_edit(self, index, event=None):
+        ent = self.device_freq_entries[index]
+        text = ent.get().strip()
+        try:
+            khz = float(text)
+        except ValueError:
+            ent.delete(0, tk.END)
+            ent.insert(0, f"{(self.device_freqs[index] or 0) / 1e3:g}")
+            return
+        self.device_freqs[index] = khz * 1e3
+        ent.delete(0, tk.END)
+        ent.insert(0, f"{khz:g}")
+        self.recalculate()
+
+    def _on_device_amp_edit(self, index, event=None):
+        ent = self.device_amp_entries[index]
+        text = ent.get().strip()
+        if text.lower().endswith("dbuv"):
+            text = text[:-5]
+        try:
+            val = float(text)
+        except ValueError:
+            ent.delete(0, tk.END)
+            ent.insert(0, str(self.device_amplitudes[index]))
+            return
+        self.device_amplitudes[index] = val
+        ent.delete(0, tk.END)
+        ent.insert(0, f"{val:g}")
+        self.recalculate()
+
+    def _on_device_check(self, index):
+        self.device_enabled[index] = self.device_check_vars[index].get()
+        self.recalculate()
+
+    @staticmethod
+    def _harmonic_frequencies(freq, num=NUM_HARMONICS):
+        if freq is None or freq <= 0:
+            return []
+        return [freq * n for n in range(1, num + 1)]
+
     def reset_defaults(self):
         for name, comp in DEFAULTS.items():
             COMPONENTS[name]["value"] = comp["value"]
@@ -511,11 +643,41 @@ class CE102App(tk.Tk):
         ax.set_ylabel("Level in dBuV")
 
         ymin, ymax = -20, 100
+
+        valid_amps = [self.device_amplitudes[i] for i in range(NUM_DEVICES)
+                      if self.device_freqs[i] is not None and self.device_enabled[i]]
+        if valid_amps:
+            ymax = max(ymax, max(valid_amps) + 10)
+
         ax.set_ylim(ymin, ymax)
         ax.yaxis.set_major_locator(FixedLocator(np.arange(ymin, ymax + 1, 10)))
 
+        # Device fundamental + harmonic vertical markers with amplitude points
+        for i in range(NUM_DEVICES):
+            if self.device_freqs[i] is None or not self.device_enabled[i]:
+                continue
+            color = DEVICE_COLORS[i]
+            label = DEVICE_LABELS[i]
+            amp = self.device_amplitudes[i]
+            harmonics = self._harmonic_frequencies(self.device_freqs[i])
+            for hi, hf in enumerate(harmonics):
+                if hf < FREQ_START or hf > FREQ_STOP:
+                    continue
+                if hi == 0:
+                    ax.axvline(hf, color=color, linewidth=1.8, alpha=0.9)
+                    ax.text(hf, ymax - 4, f"{label} f1", color=color, fontsize=8,
+                            ha="center", va="top", rotation=90)
+                else:
+                    ax.axvline(hf, color=color, linewidth=1.4, alpha=0.75, linestyle=":")
+                    ax.text(hf, ymin + 4, f"{hi + 1}f", color=color, fontsize=7,
+                            ha="center", va="bottom", rotation=90)
+                ax.plot(hf, amp, marker="o", markersize=5, color=color,
+                        linestyle="none", clip_on=False)
+                ax.axhline(amp, color=color, linewidth=0.6, alpha=0.35, linestyle="-")
+
         ax.grid(True, which="major", linestyle=":", linewidth=0.6)
-        ax.legend(loc="upper right", fontsize=8, ncol=3)
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles, labels, loc="upper right", fontsize=8, ncol=3)
         ax.set_title("Differential-Mode / Common-Mode / Combined Level vs. CE102-28V Limit", fontsize=10)
 
         self.fig.tight_layout()
