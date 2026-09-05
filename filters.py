@@ -33,33 +33,33 @@ IMG_SCALE = 0.82
 # 1. COMPONENT DEFINITIONS
 # --------------------------------------------------------------------------
 UNIT_SCALE = {
-    "pF": 1e-12, "nF": 1e-9, "uF": 1e-6, "mF": 1e-3, "F": 1.0,
-    "nH": 1e-9, "uH": 1e-6, "mH": 1e-3, "H": 1.0,
-    "ohm": 1.0, "kohm": 1e3, "Mohm": 1e6,
+    "pF": 1e-12, "nF": 1e-9, "uF": 1e-6, "µF": 1e-6, "mF": 1e-3, "F": 1.0,
+    "nH": 1e-9, "uH": 1e-6, "µH": 1e-6, "mH": 1e-3, "H": 1.0,
+    "ohm": 1.0, "Ω": 1.0, "kohm": 1e3, "kΩ": 1e3, "Mohm": 1e6, "MΩ": 1e6,
 }
 
 def mk(ctype, value, unit, box):
     return {"ctype": ctype, "value": value, "unit": unit, "box": box}
 
 COMPONENTS = {
-    "C3":  mk("C", 0.1,   "uF",  (72, 270, 107, 283)),
-    "CMC": mk("L", 500,   "uH",  (206, 312, 241, 324)),
+    "C3":  mk("C", 0.1,   "µF",  (72, 270, 107, 283)),
+    "CMC": mk("L", 500,   "µH",  (206, 312, 241, 324)),
     "C2":  mk("C", 2.2,   "nF",  (303, 112, 337, 124)),
-    "C4":  mk("C", 1,     "uF",  (303, 269, 337, 281)),
-    "R4":  mk("R", 2.2,   "ohm", (303, 429, 337, 441)),
+    "C4":  mk("C", 1,     "µF",  (303, 269, 337, 281)),
+    "R4":  mk("R", 2.2,   "Ω",  (303, 429, 337, 441)),
     "C12": mk("C", 2.2,   "nF",  (303, 485, 337, 497)),
-    "C9":  mk("C", 1,     "uF",  (381, 325, 416, 338)),
-    "R2":  mk("R", 2.2,   "ohm", (387, 237, 422, 249)),
+    "C9":  mk("C", 1,     "µF",  (381, 325, 416, 338)),
+    "R2":  mk("R", 2.2,   "Ω",  (387, 237, 422, 249)),
     "C1":  mk("C", 2.2,   "nF",  (415, 78, 450, 90)),
-    "R1":  mk("R", 2.2,   "ohm", (415, 134, 450, 147)),
+    "R1":  mk("R", 2.2,   "Ω",  (415, 134, 450, 147)),
     "C11": mk("C", 2.2,   "nF",  (415, 451, 450, 463)),
-    "C5":  mk("C", 33,    "uF",  (460, 269, 495, 281)),
-    "DM":  mk("L", 10,    "uH",  (584, 168, 618, 180)),
-    "C10": mk("C", 1,     "uF",  (606, 325, 641, 338)),
-    "R3":  mk("R", 2.2,   "ohm", (612, 237, 647, 249)),
-    "C6":  mk("C", 10,    "uF",  (696, 280, 731, 293)),
-    "C7":  mk("C", 1,     "uF",  (764, 280, 798, 293)),
-    "C8":  mk("C", 0.1,   "uF",  (831, 280, 866, 293)),
+    "C5":  mk("C", 33,    "µF",  (460, 269, 495, 281)),
+    "DM":  mk("L", 10,    "µH",  (584, 168, 618, 180)),
+    "C10": mk("C", 1,     "µF",  (606, 325, 641, 338)),
+    "R3":  mk("R", 2.2,   "Ω",  (612, 237, 647, 249)),
+    "C6":  mk("C", 10,    "µF",  (696, 280, 731, 293)),
+    "C7":  mk("C", 1,     "µF",  (764, 280, 798, 293)),
+    "C8":  mk("C", 0.1,   "µF",  (831, 280, 866, 293)),
 }
 
 DEFAULTS = {k: {"value": v["value"], "unit": v["unit"]} for k, v in COMPONENTS.items()}
@@ -81,7 +81,7 @@ NOISE_SRC_AT_10M = 40.0
 
 NUM_DEVICES = 3
 NUM_HARMONICS = 4
-DEVICE_COLORS = ["orange", "cyan", "magenta"]
+DEVICE_COLORS = ["orange", "teal", "magenta"]
 DEVICE_LABELS = ["Dev 1", "Dev 2", "Dev 3"]
 
 DEVICE_INIT_FREQS = [100e3, 500e3, 1e6]   
@@ -110,15 +110,23 @@ def z_ind(L, w):
     return 1j * w * L
 
 def series_ABCD(Z):
-    return np.array([[1.0, Z], [0.0, 1.0]], dtype=complex)
+    Z = np.asarray(Z, dtype=complex)
+    N = Z.size
+    out = np.tile(np.eye(2, dtype=complex), (N, 1, 1))
+    out[:, 0, 1] = Z
+    return out
 
 def shunt_ABCD(Z):
-    Y = 1.0 / Z if abs(Z) > 1e-30 else 1e30
-    return np.array([[1.0, 0.0], [Y, 1.0]], dtype=complex)
+    Z = np.asarray(Z, dtype=complex)
+    N = Z.size
+    out = np.tile(np.eye(2, dtype=complex), (N, 1, 1))
+    Y = np.where(np.abs(Z) > 1e-30, 1.0 / Z, 1e30 + 0j)
+    out[:, 1, 0] = Y
+    return out
 
 def cascade(mats):
-    out = np.eye(2, dtype=complex)
-    for m in mats:
+    out = mats[0]
+    for m in mats[1:]:
         out = out @ m
     return out
 
@@ -171,11 +179,8 @@ def compute_response(noise_10k=NOISE_SRC_AT_10K, noise_10m=NOISE_SRC_AT_10M):
     freqs = np.logspace(np.log10(FREQ_START), np.log10(FREQ_STOP), N_POINTS)
     ws = 2.0 * np.pi * freqs
 
-    dm_stack = np.empty((N_POINTS, 2, 2), dtype=complex)
-    cm_stack = np.empty((N_POINTS, 2, 2), dtype=complex)
-    for i, w in enumerate(ws):
-        dm_stack[i] = build_dm_chain(w)
-        cm_stack[i] = build_cm_chain(w)
+    dm_stack = build_dm_chain(ws)
+    cm_stack = build_cm_chain(ws)
 
     il_dm = insertion_loss_db(dm_stack, ZS_DM, ZL_DM)
     il_cm = insertion_loss_db(cm_stack, ZS_CM, ZL_CM)
@@ -190,6 +195,19 @@ def compute_response(noise_10k=NOISE_SRC_AT_10K, noise_10m=NOISE_SRC_AT_10M):
     level_combined = src - il_combined
     limit = ce102_limit_curve(freqs)
     return freqs, level_dm, level_cm, level_combined, limit
+
+
+def insertion_loss_at(freqs_at):
+    """Combined (DM+CM) insertion loss in dB at arbitrary frequency points."""
+    freqs_at = np.atleast_1d(np.asarray(freqs_at, dtype=float))
+    ws = 2.0 * np.pi * freqs_at
+    dm_stack = build_dm_chain(ws)
+    cm_stack = build_cm_chain(ws)
+    il_dm = insertion_loss_db(dm_stack, ZS_DM, ZL_DM)
+    il_cm = insertion_loss_db(cm_stack, ZS_CM, ZL_CM)
+    t_dm = 10.0 ** (-il_dm / 20.0)
+    t_cm = 10.0 ** (-il_cm / 20.0)
+    return -20.0 * np.log10(np.maximum(t_dm + t_cm, 1e-15))
 
 
 # --------------------------------------------------------------------------
@@ -207,8 +225,13 @@ class CE102App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("MIL-STD-461F CE102 EMI Filter Designer")
-        self.geometry("1650x950")
-        self.minsize(1350, 850)
+
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        win_w = min(1650, sw - 40)
+        win_h = min(950, sh - 100)
+        self.geometry(f"{win_w}x{win_h}")
+        self.minsize(min(1350, win_w), min(850, win_h))
 
         self.entries = {}
         self.schem_image_ref = None
@@ -237,7 +260,7 @@ class CE102App(tk.Tk):
         val_file = os.path.join(SCRIPT_DIR, "Values.txt")
         if not os.path.exists(val_file):
             return
-        with open(val_file, "r") as f:
+        with open(val_file, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if not line or "=" not in line:
@@ -245,15 +268,38 @@ class CE102App(tk.Tk):
                 name, val_str = line.split("=", 1)
                 name = name.strip()
                 val_str = val_str.strip()
-                
+
+                if name.startswith("DEV") and "_" in name:
+                    devpart, field = name.split("_", 1)
+                    idx_str = devpart[3:]
+                    if not idx_str.isdigit():
+                        continue
+                    i = int(idx_str)
+                    if not (0 <= i < NUM_DEVICES):
+                        continue
+                    try:
+                        if field == "FQ":
+                            self.device_freqs[i] = float(val_str) * 1e3
+                        elif field == "DB":
+                            self.device_amplitudes[i] = float(val_str)
+                        elif field == "ON":
+                            self.device_enabled[i] = int(val_str) == 1
+                    except ValueError:
+                        pass
+                    continue
+
                 if name in COMPONENTS:
                     comp = COMPONENTS[name]
                     base_units = {'C': 'F', 'L': 'H', 'R': 'ohm'}
-                    if val_str and val_str[-1] in "pnumkM":
-                        val_str += base_units.get(comp['ctype'], '')
-                    elif val_str and val_str[-1].isdigit() and comp['ctype'] == 'R':
-                        val_str += "ohm"
-                    
+                    base = base_units.get(comp['ctype'], '')
+                    if val_str:
+                        last = val_str[-1]
+                        ends_with_unit = any(val_str.endswith(u) for u in UNIT_SCALE)
+                        if last in "pnumkM" and not ends_with_unit:
+                            val_str += base
+                        elif last.isdigit() and comp['ctype'] == 'R' and not ends_with_unit:
+                            val_str += "ohm"
+
                     parsed = self._parse_number_unit(val_str, comp["unit"], list(UNIT_SCALE.keys()))
                     if parsed is not None:
                         val, unit = parsed
@@ -262,14 +308,22 @@ class CE102App(tk.Tk):
 
     def save_values(self):
         val_file = os.path.join(SCRIPT_DIR, "Values.txt")
-        with open(val_file, "w") as f:
+        with open(val_file, "w", encoding="utf-8") as f:
             for name, comp in COMPONENTS.items():
-                unit_str = comp["unit"]
-                unit_abbr = unit_str.replace("F", "").replace("H", "").replace("ohm", "")
                 val = comp["value"]
                 if val == int(val):
                     val = int(val)
-                f.write(f"{name}={val}{unit_abbr}\n")
+                f.write(f"{name}={val}{comp['unit']}\n")
+            for i in range(NUM_DEVICES):
+                freq_khz = (self.device_freqs[i] or 0) / 1e3
+                if freq_khz == int(freq_khz):
+                    freq_khz = int(freq_khz)
+                amp = self.device_amplitudes[i]
+                if amp == int(amp):
+                    amp = int(amp)
+                f.write(f"DEV{i}_FQ={freq_khz}\n")
+                f.write(f"DEV{i}_DB={amp}\n")
+                f.write(f"DEV{i}_ON={1 if self.device_enabled[i] else 0}\n")
 
     def on_closing(self):
         self.save_values()
@@ -279,18 +333,27 @@ class CE102App(tk.Tk):
         graph_path = os.path.join(SCRIPT_DIR, "graph.png")
         self.fig.savefig(graph_path)
 
-        if self.pil_img:
-            img_copy = self.pil_img.copy()
+        if self.pil_img_orig:
+            img_copy = self.pil_img_orig.copy()
             draw = ImageDraw.Draw(img_copy)
             try:
-                font = ImageFont.truetype("arial.ttf", 11) 
+                font = ImageFont.truetype("arial.ttf", 11)
             except IOError:
                 font = ImageFont.load_default()
 
+            arr = np.array(self.pil_img_orig).astype(np.int32)
+            dark_mask = arr.mean(axis=2) < 200
+
+            def collisions(mask, y, x):
+                h, w = mask.shape
+                if x < 0 or y < 0 or x + w > dark_mask.shape[1] or y + h > dark_mask.shape[0]:
+                    return None
+                return int(dark_mask[y:y + h, x:x + w][mask].sum())
+
             for name, comp in COMPONENTS.items():
-                x0, y0, x1, y1 = [int(v * IMG_SCALE) for v in comp["box"]]
+                x0, y0, x1, y1 = comp["box"]
                 val_text = self._fmt_value(comp)
-                
+
                 try:
                     bbox = font.getbbox(val_text)
                     tw = bbox[2] - bbox[0]
@@ -300,9 +363,36 @@ class CE102App(tk.Tk):
                         tw, th = draw.textsize(val_text, font=font)
                     except AttributeError:
                         tw, th = 6 * len(val_text), 10
-                
-                tx = (x0 + x1) / 2 - tw / 2
-                ty = (y0 + y1) / 2 - th / 2
+                tw += 2
+
+                mask_im = Image.new("L", (tw + 8, th + 8), 255)
+                mdraw = ImageDraw.Draw(mask_im)
+                try:
+                    mdraw.text((4, 4), val_text, font=font, fill=0)
+                    scr = np.array(mask_im)
+                    mask = scr[4:4 + th + 6, 4:4 + tw] < 200
+                except Exception:
+                    mask = None
+
+                cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+                cands = [
+                    ("center", (x0 + x1 - tw) // 2, (y0 + y1 - th) // 2),
+                    ("above", cx - tw // 2, y0 - 3 - th),
+                    ("below", cx - tw // 2, y1 + 3),
+                    ("left", x0 - tw - 3, cy - th // 2),
+                    ("right", x1 + 3, cy - th // 2),
+                ]
+                tx, ty = cands[0][1], cands[0][2]
+                if mask is not None:
+                    scored = []
+                    for key, x, y in cands:
+                        c = collisions(mask, y, x)
+                        if c is not None:
+                            scored.append((c, key, x, y))
+                    if scored:
+                        scored.sort(key=lambda s: (s[0], 0 if s[1] == "center" else 1))
+                        _, _, tx, ty = scored[0]
+
                 draw.text((tx, ty), val_text, fill=(0, 0, 200), font=font)
             
             circuit_path = os.path.join(SCRIPT_DIR, "circuit.png")
@@ -437,10 +527,18 @@ class CE102App(tk.Tk):
 
         ttk.Separator(left_col, orient='horizontal').pack(fill='x', pady=12)
 
+        # Bottom button row of the left column
+        button_row = ttk.Frame(left_col)
+        button_row.pack(anchor="e")
+
+        self.reset_button = ttk.Button(button_row, text="Reset Defaults",
+                                       command=self.reset_defaults, width=14)
+        self.reset_button.pack(side=tk.LEFT, padx=(0, 8))
+
         # Save button at the very bottom of the left column
-        self.save_button = ttk.Button(left_col, text="Save Results",
+        self.save_button = ttk.Button(button_row, text="Save Results",
                                       command=self.save_images, width=14)
-        self.save_button.pack(anchor="e", pady=(0, 0))
+        self.save_button.pack(side=tk.LEFT)
 
         # -------------------------------------------------------
         # RIGHT COLUMN (Graph spanning full height) - card
@@ -510,12 +608,17 @@ class CE102App(tk.Tk):
         if unit_part == "":
             return val, default_unit
         norm = {
-            "pf": "pF", "PF": "pF", "nf": "nF", "NF": "nF",
-            "uf": "uF", "UF": "uF", "mf": "mF",
-            "nh": "nH", "NH": "nH", "uh": "uH", "UH": "uH", "mh": "mH", "MH": "mH",
-            "ohm": "ohm", "Ohm": "ohm", "OHM": "ohm", "R": "ohm", "r": "ohm",
-            "kohm": "kohm", "Kohm": "kohm", "KOHM": "kohm", "k": "kohm", "K": "kohm",
-            "Mohm": "Mohm", "MOHM": "Mohm",
+            "pf": "pF", "pF": "pF", "PF": "pF",
+            "nf": "nF", "nF": "nF", "NF": "nF",
+            "uf": "µF", "uF": "µF", "UF": "µF",
+            "mf": "mF", "mF": "mF", "MF": "mF",
+            "nh": "nH", "nH": "nH", "NH": "nH",
+            "uh": "µH", "uH": "µH", "UH": "µH",
+            "mh": "mH", "mH": "mH", "MH": "mH",
+            "ohm": "Ω", "Ohm": "Ω", "OHM": "Ω", "Ω": "Ω", "R": "Ω", "r": "Ω",
+            "kohm": "kΩ", "Kohm": "kΩ", "KOHM": "kΩ", "kΩ": "kΩ", "KΩ": "kΩ",
+            "k": "kΩ", "K": "kΩ",
+            "Mohm": "MΩ", "MOHM": "MΩ", "MΩ": "MΩ",
         }
         unit = norm.get(unit_part, unit_part)
         if unit not in valid_units:
@@ -563,6 +666,7 @@ class CE102App(tk.Tk):
             ent.delete(0, tk.END)
             ent.insert(0, f"{(self.device_freqs[index] or 0) / 1e3:g}")
             return
+        khz = min(max(khz, 1.0), 1e5)
         self.device_freqs[index] = khz * 1e3
         ent.delete(0, tk.END)
         ent.insert(0, f"{khz:g}")
@@ -579,6 +683,7 @@ class CE102App(tk.Tk):
             ent.delete(0, tk.END)
             ent.insert(0, str(self.device_amplitudes[index]))
             return
+        val = min(max(val, 0.0), 200.0)
         self.device_amplitudes[index] = val
         ent.delete(0, tk.END)
         ent.insert(0, f"{val:g}")
@@ -606,6 +711,17 @@ class CE102App(tk.Tk):
         self.noise_10k_entry.insert(0, str(self.noise_10k))
         self.noise_10m_entry.delete(0, tk.END)
         self.noise_10m_entry.insert(0, str(self.noise_10m))
+        self.device_freqs = list(DEVICE_INIT_FREQS)
+        self.device_amplitudes = [DEVICE_DEFAULT_AMP] * NUM_DEVICES
+        self.device_enabled = [True] * NUM_DEVICES
+        for i in range(NUM_DEVICES):
+            ent = self.device_freq_entries[i]
+            ent.delete(0, tk.END)
+            ent.insert(0, f"{self.device_freqs[i] / 1e3:g}")
+            ent = self.device_amp_entries[i]
+            ent.delete(0, tk.END)
+            ent.insert(0, f"{self.device_amplitudes[i]:g}")
+            self.device_check_vars[i].set(True)
         self.recalculate()
 
     # ---------------------------------------------------------------
@@ -628,9 +744,11 @@ class CE102App(tk.Tk):
         ax = self.ax
         ax.clear()
 
+        # Combined drawn first, CM drawn LAST (on top) so the green curve
+        # stays visible even where it nearly coincides with the combined level.
         ax.semilogx(freqs, level_dm, color="tab:blue", linewidth=1.4, label="Differential Mode")
-        ax.semilogx(freqs, level_cm, color="tab:green", linewidth=1.4, label="Common Mode")
         ax.semilogx(freqs, level_combined, color="tab:purple", linewidth=1.7, label="DM + CM Combined")
+        ax.semilogx(freqs, level_cm, color="tab:green", linestyle="-", linewidth=1.5, label="Common Mode")
         ax.semilogx(freqs, limit, color="red", linestyle="--", linewidth=1.6)
         ax.text(freqs[-1], limit[-1] + 2, "CE102-28V", color="red", fontsize=9,
                 ha="right", va="bottom")
@@ -644,36 +762,63 @@ class CE102App(tk.Tk):
 
         ymin, ymax = -20, 100
 
-        valid_amps = [self.device_amplitudes[i] for i in range(NUM_DEVICES)
-                      if self.device_freqs[i] is not None and self.device_enabled[i]]
-        if valid_amps:
-            ymax = max(ymax, max(valid_amps) + 10)
+        # Device fundamental + harmonic markers, with levels AFTER filtering
+        device_levels = []
+        for i in range(NUM_DEVICES):
+            if self.device_freqs[i] is None or not self.device_enabled[i]:
+                continue
+            harmonics = [h for h in self._harmonic_frequencies(self.device_freqs[i])
+                         if FREQ_START <= h <= FREQ_STOP]
+            if not harmonics:
+                continue
+            amp = self.device_amplitudes[i]
+            il = insertion_loss_at(np.array(harmonics))
+            device_levels.append(amp - il)
+
+        if device_levels:
+            flat = [lv for grp in device_levels for lv in grp]
+            if flat:
+                ymax = max(ymax, max(flat) + 10)
+                if min(flat) < ymin:
+                    ymin = min(flat) - 10
 
         ax.set_ylim(ymin, ymax)
         ax.yaxis.set_major_locator(FixedLocator(np.arange(ymin, ymax + 1, 10)))
 
-        # Device fundamental + harmonic vertical markers with amplitude points
         for i in range(NUM_DEVICES):
             if self.device_freqs[i] is None or not self.device_enabled[i]:
                 continue
             color = DEVICE_COLORS[i]
             label = DEVICE_LABELS[i]
             amp = self.device_amplitudes[i]
-            harmonics = self._harmonic_frequencies(self.device_freqs[i])
-            for hi, hf in enumerate(harmonics):
-                if hf < FREQ_START or hf > FREQ_STOP:
-                    continue
+            harmonics = [h for h in self._harmonic_frequencies(self.device_freqs[i])
+                         if FREQ_START <= h <= FREQ_STOP]
+            if not harmonics:
+                continue
+            hfs = np.array(harmonics)
+            il = insertion_loss_at(hfs)
+            lev = amp - il
+            if self.device_amp_labels:
+                self.device_amp_labels[i].config(
+                    text=f"dBuV\n(-> {max(lev):.0f} dBuV)")
+
+            # Small per-device x jitter separates coincident harmonics
+            jitter = 1.0 + (i - 1) * 0.02
+            for hi, (hf, lv) in enumerate(zip(hfs, lev)):
+                fx = hf * jitter
                 if hi == 0:
-                    ax.axvline(hf, color=color, linewidth=1.8, alpha=0.9)
-                    ax.text(hf, ymax - 4, f"{label} f1", color=color, fontsize=8,
+                    ax.axvline(fx, color=color, linewidth=1.8, alpha=0.9)
+                    ax.text(fx, ymax - 4, f"{label} f1", color=color, fontsize=8,
                             ha="center", va="top", rotation=90)
                 else:
-                    ax.axvline(hf, color=color, linewidth=1.4, alpha=0.75, linestyle=":")
-                    ax.text(hf, ymin + 4, f"{hi + 1}f", color=color, fontsize=7,
+                    ax.axvline(fx, color=color, linewidth=1.4, alpha=0.75, linestyle=":")
+                    ax.text(fx, ymin + 4, f"{hi + 1}f", color=color, fontsize=7,
                             ha="center", va="bottom", rotation=90)
-                ax.plot(hf, amp, marker="o", markersize=5, color=color,
+                ax.plot(fx, lv, marker="o", markersize=5, color=color,
                         linestyle="none", clip_on=False)
-                ax.axhline(amp, color=color, linewidth=0.6, alpha=0.35, linestyle="-")
+                # short horizontal tick at the filtered level (no full-width line)
+                ax.plot([fx * 0.97, fx * 1.03], [lv, lv], color=color,
+                        linewidth=1.0, alpha=0.8, clip_on=False)
 
         ax.grid(True, which="major", linestyle=":", linewidth=0.6)
         handles, labels = ax.get_legend_handles_labels()
