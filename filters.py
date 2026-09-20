@@ -38,31 +38,54 @@ UNIT_SCALE = {
     "ohm": 1.0, "Ω": 1.0, "kohm": 1e3, "kΩ": 1e3, "Mohm": 1e6, "MΩ": 1e6,
 }
 
-def mk(ctype, value, unit, box):
-    return {"ctype": ctype, "value": value, "unit": unit, "box": box}
+def mk(ctype, value, unit, box, rser=0.0, lser=0.0, cser=0.0):
+    # rser/lser/cser: series parasitics in mΩ / nH / nF (see PARASITIC_UNITS).
+    # The parasitic matching the component type itself — series C on a
+    # capacitor, series L on an inductor, series R on a resistor — is
+    # nonphysical, so it is removed: forced to zero here, ignored on load,
+    # omitted on save, and never included by z_series(). Resistors carry no
+    # series parasitics at all.
+    if ctype == "R":
+        rser = lser = cser = 0.0
+    elif ctype == "C":
+        cser = 0.0
+    else:
+        lser = 0.0
+    return {"ctype": ctype, "value": value, "unit": unit, "box": box,
+            "rser": rser, "lser": lser, "cser": cser}
+
+SELF_PARASITIC = {"C": "cser", "L": "lser", "R": "rser"}
+
+def active_parasitics(comp):
+    """Keys of the series parasitics a component actually carries: everything
+    except the one matching its own type; resistors carry none."""
+    if comp["ctype"] == "R":
+        return []
+    skip = SELF_PARASITIC[comp["ctype"]]
+    return [k for k in ("rser", "lser", "cser") if k != skip]
 
 COMPONENTS = {
-    "C3":  mk("C", 0.1,   "µF",  (72, 270, 107, 283)),
-    "CMC": mk("L", 500,   "µH",  (206, 312, 241, 324)),
-    "C2":  mk("C", 2.2,   "nF",  (303, 112, 337, 124)),
-    "C4":  mk("C", 1,     "µF",  (303, 269, 337, 281)),
-    "R4":  mk("R", 2.2,   "Ω",  (303, 429, 337, 441)),
-    "C12": mk("C", 2.2,   "nF",  (303, 485, 337, 497)),
-    "C9":  mk("C", 1,     "µF",  (381, 325, 416, 338)),
-    "R2":  mk("R", 2.2,   "Ω",  (387, 237, 422, 249)),
-    "C1":  mk("C", 2.2,   "nF",  (415, 78, 450, 90)),
-    "R1":  mk("R", 2.2,   "Ω",  (415, 134, 450, 147)),
-    "C11": mk("C", 2.2,   "nF",  (415, 451, 450, 463)),
-    "C5":  mk("C", 33,    "µF",  (460, 269, 495, 281)),
-    "DM":  mk("L", 10,    "µH",  (584, 168, 618, 180)),
-    "C10": mk("C", 1,     "µF",  (606, 325, 641, 338)),
-    "R3":  mk("R", 2.2,   "Ω",  (612, 237, 647, 249)),
-    "C6":  mk("C", 10,    "µF",  (696, 280, 731, 293)),
-    "C7":  mk("C", 1,     "µF",  (764, 280, 798, 293)),
-    "C8":  mk("C", 0.1,   "µF",  (831, 280, 866, 293)),
+    "C3":  mk("C", 0.1,   "µF",  (72, 270, 107, 283), rser=10,   lser=20, cser=1),
+    "CMC": mk("L", 500,   "µH",  (206, 312, 241, 324), rser=200,  lser=10, cser=1),
+    "C2":  mk("C", 2.2,   "nF",  (303, 112, 337, 124), rser=10,   lser=10, cser=1),
+    "C4":  mk("C", 1,     "µF",  (303, 269, 337, 281), rser=5,    lser=5,  cser=1),
+    "R4":  mk("R", 2.2,   "Ω",  (303, 429, 337, 441), rser=5,    lser=10, cser=1),
+    "C12": mk("C", 2.2,   "nF",  (303, 485, 337, 497), rser=10,   lser=10, cser=1),
+    "C9":  mk("C", 1,     "µF",  (381, 325, 416, 338), rser=5,    lser=5,  cser=1),
+    "R2":  mk("R", 2.2,   "Ω",  (387, 237, 422, 249), rser=5,    lser=10, cser=1),
+    "C1":  mk("C", 2.2,   "nF",  (415, 78, 450, 90),   rser=10,   lser=10, cser=1),
+    "R1":  mk("R", 2.2,   "Ω",  (415, 134, 450, 147), rser=5,    lser=10, cser=1),
+    "C11": mk("C", 2.2,   "nF",  (415, 451, 450, 463), rser=10,   lser=10, cser=1),
+    "C5":  mk("C", 33,    "µF",  (460, 269, 495, 281), rser=30,   lser=5,  cser=1),
+    "DM":  mk("L", 10,    "µH",  (584, 168, 618, 180), rser=50,   lser=5,  cser=1),
+    "C10": mk("C", 1,     "µF",  (606, 325, 641, 338), rser=5,    lser=5,  cser=1),
+    "R3":  mk("R", 2.2,   "Ω",  (612, 237, 647, 249), rser=5,    lser=10, cser=1),
+    "C6":  mk("C", 10,    "µF",  (696, 280, 731, 293), rser=20,   lser=5,  cser=1),
+    "C7":  mk("C", 1,     "µF",  (764, 280, 798, 293), rser=10,   lser=5,  cser=1),
+    "C8":  mk("C", 0.1,   "µF",  (831, 280, 866, 293), rser=10,   lser=5,  cser=1),
 }
 
-DEFAULTS = {k: {"value": v["value"], "unit": v["unit"]} for k, v in COMPONENTS.items()}
+DEFAULTS = {k: dict(v) for k, v in COMPONENTS.items()}
 
 ZS_DM = 100.0   
 ZL_DM = 100.0
@@ -144,34 +167,85 @@ def get_val(name):
     c = COMPONENTS[name]
     return c["value"] * UNIT_SCALE[c["unit"]]
 
-def build_dm_chain(w):
-    L_leak = 0.02 * get_val("CMC")     
-    L_dm = get_val("DM")
+PARASITIC_UNITS = {
+    "rser": ("mΩ", {"mΩ": 1.0, "Ω": 1e3, "kΩ": 1e6, "": 1.0}),
+    "lser": ("nH", {"nH": 1.0, "uH": 1e3, "µH": 1e3, "H": 1e9, "": 1.0}),
+    "cser": ("nF", {"nF": 1.0, "uF": 1e3, "µF": 1e3, "pF": 1e-3, "F": 1e9, "": 1.0}),
+}
 
+# When True, z_series() includes each element's series parasitics (rser/lser/cser);
+# when False the ideal element is used. Mirrors the GUI "Parasitic Effect" checkbox.
+PARASITIC_EFFECT = True
+
+def parse_parasitic(text, key):
+    text = text.strip().replace(" ", "")
+    if not text:
+        return None
+    i = len(text)
+    while i > 0 and not (text[i - 1].isdigit() or text[i - 1] == '.'):
+        i -= 1
+    num_part, unit_part = text[:i], text[i:]
+    try:
+        val = float(num_part)
+    except ValueError:
+        return None
+    if val < 0:
+        return None
+    factor = PARASITIC_UNITS[key][1].get(unit_part)
+    if factor is None:
+        return None
+    return val * factor
+
+def fmt_parasitic(v, key):
+    unit = PARASITIC_UNITS[key][0]
+    n = int(v) if v == int(v) else v
+    return f"{n}{unit}"
+
+def z_series(name, w):
+    """Total impedance of a component. With PARASITIC_EFFECT on, the ideal
+    element is in series with rser (mΩ), lser (nH) and cser (nF) parasitics;
+    otherwise the ideal element alone is used."""
+    comp = COMPONENTS[name]
+    z = 0.0
+    if PARASITIC_EFFECT and comp["ctype"] != "R":
+        skip = SELF_PARASITIC[comp["ctype"]]
+        if skip != "rser":
+            z = z + comp["rser"] * 1e-3
+        if skip != "lser":
+            z = z + 1j * w * comp["lser"] * 1e-9
+        if skip != "cser" and comp["cser"] > 0:
+            z = z + z_cap(comp["cser"] * 1e-9, w)
+    if comp["ctype"] == "C":
+        z = z + z_cap(get_val(name), w)
+    elif comp["ctype"] == "L":
+        z = z + z_ind(get_val(name), w)
+    else:
+        z = z + get_val(name)
+    return z
+
+def build_dm_chain(w):
     mats = [
-        shunt_ABCD(z_cap(get_val("C3"), w)),
-        series_ABCD(z_ind(L_leak, w)),
-        shunt_ABCD(z_cap(get_val("C4"), w)),
-        shunt_ABCD(get_val("R2") + z_cap(get_val("C9"), w)),
-        shunt_ABCD(z_cap(get_val("C5"), w)),
-        series_ABCD(z_ind(L_dm, w)),
-        shunt_ABCD(get_val("R3") + z_cap(get_val("C10"), w)),
-        shunt_ABCD(z_cap(get_val("C6") + get_val("C7") + get_val("C8"), w)),
+        shunt_ABCD(z_series("C3", w)),
+        series_ABCD(0.02 * z_series("CMC", w)),
+        shunt_ABCD(z_series("C4", w)),
+        shunt_ABCD(z_series("R2", w) + z_series("C9", w)),
+        shunt_ABCD(z_series("C5", w)),
+        series_ABCD(z_series("DM", w)),
+        shunt_ABCD(z_series("R3", w) + z_series("C10", w)),
+        shunt_ABCD(1.0 / (1.0 / z_series("C6", w) + 1.0 / z_series("C7", w)
+                          + 1.0 / z_series("C8", w))),
     ]
     return cascade(mats)
 
 def build_cm_chain(w):
-    L_cm = get_val("CMC")
-    L_dm = get_val("DM")
-
-    Y_top = 1.0 / (get_val("R1") + z_cap(get_val("C1"), w)) + 1.0 / z_cap(get_val("C2"), w)
-    Y_bot = 1.0 / (get_val("R4") + z_cap(get_val("C11"), w)) + 1.0 / z_cap(get_val("C12"), w)
+    Y_top = 1.0 / (z_series("R1", w) + z_series("C1", w)) + 1.0 / z_series("C2", w)
+    Y_bot = 1.0 / (z_series("R4", w) + z_series("C11", w)) + 1.0 / z_series("C12", w)
     Z_y = 1.0 / (Y_top + Y_bot)
 
     mats = [
-        series_ABCD(z_ind(2.0 * L_cm, w)),
+        series_ABCD(2.0 * z_series("CMC", w)),
         shunt_ABCD(Z_y),
-        series_ABCD(z_ind(L_dm, w)),   
+        series_ABCD(z_series("DM", w)),
     ]
     return cascade(mats)
 
@@ -231,9 +305,10 @@ class CE102App(tk.Tk):
         win_w = min(1650, sw - 40)
         win_h = min(950, sh - 100)
         self.geometry(f"{win_w}x{win_h}")
-        self.minsize(min(1350, win_w), min(850, win_h))
+        self.minsize(min(1350, win_w), min(900, win_h))
 
         self.entries = {}
+        self.parasitic_entries = {}
         self.schem_image_ref = None
         self.pil_img = None
         self.noise_10k = NOISE_SRC_AT_10K
@@ -288,23 +363,33 @@ class CE102App(tk.Tk):
                         pass
                     continue
 
-                if name in COMPONENTS:
-                    comp = COMPONENTS[name]
-                    base_units = {'C': 'F', 'L': 'H', 'R': 'ohm'}
-                    base = base_units.get(comp['ctype'], '')
-                    if val_str:
-                        last = val_str[-1]
-                        ends_with_unit = any(val_str.endswith(u) for u in UNIT_SCALE)
-                        if last in "pnumkM" and not ends_with_unit:
-                            val_str += base
-                        elif last.isdigit() and comp['ctype'] == 'R' and not ends_with_unit:
-                            val_str += "ohm"
+                for suf, key in (("_RSER", "rser"), ("_LSER", "lser"), ("_CSER", "cser")):
+                    if name.endswith(suf) and name[:-len(suf)] in COMPONENTS:
+                        target = COMPONENTS[name[:-len(suf)]]
+                        if target["ctype"] == "R" or key == SELF_PARASITIC[target["ctype"]]:
+                            break
+                        parsed = parse_parasitic(val_str, key)
+                        if parsed is not None:
+                            target[key] = parsed
+                        break
+                else:
+                    if name in COMPONENTS:
+                        comp = COMPONENTS[name]
+                        base_units = {'C': 'F', 'L': 'H', 'R': 'ohm'}
+                        base = base_units.get(comp['ctype'], '')
+                        if val_str:
+                            last = val_str[-1]
+                            ends_with_unit = any(val_str.endswith(u) for u in UNIT_SCALE)
+                            if last in "pnumkM" and not ends_with_unit:
+                                val_str += base
+                            elif last.isdigit() and comp['ctype'] == 'R' and not ends_with_unit:
+                                val_str += "ohm"
 
-                    parsed = self._parse_number_unit(val_str, comp["unit"], list(UNIT_SCALE.keys()))
-                    if parsed is not None:
-                        val, unit = parsed
-                        comp["value"] = val
-                        comp["unit"] = unit
+                        parsed = self._parse_number_unit(val_str, comp["unit"], list(UNIT_SCALE.keys()))
+                        if parsed is not None:
+                            val, unit = parsed
+                            comp["value"] = val
+                            comp["unit"] = unit
 
     def save_values(self):
         val_file = os.path.join(SCRIPT_DIR, "Values.txt")
@@ -314,6 +399,14 @@ class CE102App(tk.Tk):
                 if val == int(val):
                     val = int(val)
                 f.write(f"{name}={val}{comp['unit']}\n")
+                if comp["ctype"] != "R":
+                    skip = SELF_PARASITIC[comp["ctype"]]
+                    if skip != "rser":
+                        f.write(f"{name}_RSER={fmt_parasitic(comp['rser'], 'rser')}\n")
+                    if skip != "lser":
+                        f.write(f"{name}_LSER={fmt_parasitic(comp['lser'], 'lser')}\n")
+                    if skip != "cser":
+                        f.write(f"{name}_CSER={fmt_parasitic(comp['cser'], 'cser')}\n")
             for i in range(NUM_DEVICES):
                 freq_khz = (self.device_freqs[i] or 0) / 1e3
                 if freq_khz == int(freq_khz):
@@ -406,28 +499,47 @@ class CE102App(tk.Tk):
         outer.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
         # -------------------------------------------------------
-        # LEFT COLUMN (Schematic Top, Params Bottom)
+        # LEFT COLUMN: scrollable panel with schematic + parameter inputs
         # -------------------------------------------------------
         schem_w = int(Image.open(SCHEMATIC_PATH).size[0] * IMG_SCALE)
-        left_col = ttk.Frame(outer, width=schem_w)
-        left_col.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 16))
-        left_col.pack_propagate(False)
+
+        scroll_canvas = tk.Canvas(outer, bg="#f0f0f0", highlightthickness=0)
+        scroll_canvas.pack(side=tk.LEFT, fill=tk.Y)
+
+        scrollbar = ttk.Scrollbar(outer, orient="vertical", command=scroll_canvas.yview)
+        scrollbar.pack(side=tk.LEFT, fill=tk.Y)
+
+        left_panel = ttk.Frame(scroll_canvas)
+        scroll_canvas.create_window((0, 0), window=left_panel, anchor="nw")
+
+        def _on_left_configure(event):
+            scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
+            req = left_panel.winfo_reqwidth()
+            if scroll_canvas.winfo_width() != req:
+                scroll_canvas.config(width=req)
+
+        left_panel.bind("<Configure>", _on_left_configure)
+        scroll_canvas.configure(yscrollcommand=scrollbar.set)
 
         # 1. Schematic Panel (card)
-        schem_card = ttk.LabelFrame(left_col, text=" Schematic ", padding=(8, 6))
-        schem_card.pack(anchor="w", fill="x", pady=(0, 12))
+        schem_card = ttk.LabelFrame(left_panel, text=" Schematic ", padding=(8, 6))
+        schem_card.pack(anchor="nw")
 
         self.schem_canvas = tk.Canvas(schem_card, bg="white", highlightthickness=1,
                                       highlightbackground="#cccccc")
         self.schem_canvas.pack(anchor="nw")
 
-        # 2+3. Component Parameters & Simulation Parameters (side by side)
-        lower_row = ttk.Frame(left_col)
-        lower_row.pack(anchor="w", fill="x")
+        # 2. Cards row: Component Parameters (left) | Simulation Parameters (right)
+        cards_row = ttk.Frame(left_panel)
+        cards_row.pack(anchor="nw", pady=(10, 0))
 
-        # 2. Component Parameter Tables (card)
-        params_card = ttk.LabelFrame(lower_row, text=" Component Parameters ", padding=(8, 6))
-        params_card.pack(side=tk.LEFT, anchor="n", fill="y")
+        params_card = ttk.LabelFrame(cards_row, text=" Component Parameters ", padding=(8, 6))
+        params_card.pack(side=tk.LEFT, anchor="n")
+
+        self.parasitic_check_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(params_card, text="Parasitic Effect",
+                        variable=self.parasitic_check_var,
+                        command=self._on_parasitic_toggle).pack(anchor="w", pady=(0, 4))
 
         params_panel = ttk.Frame(params_card)
         params_panel.pack(anchor="nw")
@@ -442,23 +554,39 @@ class CE102App(tk.Tk):
             col_frame = ttk.Frame(params_panel)
             col_frame.grid(row=0, column=col_idx, sticky="n", padx=(0, 15))
 
-            ttk.Label(col_frame, text=title, font=("Segoe UI", 10, "bold")).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 4))
+            par_keys = active_parasitics(COMPONENTS[keys[0]])
+            headers = ["Component", "Value"] + [
+                {"rser": "Rs mΩ", "lser": "Ls nH", "cser": "Cs nF"}[k] for k in par_keys]
 
-            for r_idx, name in enumerate(keys, start=1):
-                ttk.Label(col_frame, text=name, width=6, anchor="w").grid(row=r_idx, column=0, sticky="w", pady=1)
-                ent = ttk.Entry(col_frame, width=8, justify="center")
+            ttk.Label(col_frame, text=title, font=("Segoe UI", 10, "bold")).grid(
+                row=0, column=0, columnspan=len(headers), sticky="w", pady=(0, 4))
+
+            for c, htext in enumerate(headers):
+                if c > 0:
+                    ttk.Label(col_frame, text=htext, font=("Segoe UI", 7, "bold"),
+                              foreground="#555555").grid(row=1, column=c, sticky="w", pady=(0, 2))
+
+            for r_idx, name in enumerate(keys, start=2):
+                ttk.Label(col_frame, text=name, width=3, anchor="w").grid(row=r_idx, column=0, sticky="w", pady=0)
+                ent = ttk.Entry(col_frame, width=7, justify="center")
                 comp = COMPONENTS[name]
                 ent.insert(0, self._fmt_value(comp))
-                ent.grid(row=r_idx, column=1, sticky="w", pady=1)
+                ent.grid(row=r_idx, column=1, sticky="w", pady=0)
                 ent.bind("<Return>", lambda e, n=name: self._on_edit(n))
                 ent.bind("<FocusOut>", lambda e, n=name: self._on_edit(n))
                 self.entries[name] = ent
 
-        # vertical separator between the two cards
-        ttk.Separator(lower_row, orient="vertical").pack(side=tk.LEFT, fill="y", padx=14)
+                for pcol, key in enumerate(par_keys, start=2):
+                    pent = ttk.Entry(col_frame, width=5, justify="center")
+                    pent.insert(0, f"{comp[key]:g}")
+                    pent.grid(row=r_idx, column=pcol, sticky="w", pady=0)
+                    pent.bind("<Return>", lambda e, n=name, k=key: self._on_parasitic_edit(n, k))
+                    pent.bind("<FocusOut>", lambda e, n=name, k=key: self._on_parasitic_edit(n, k))
+                    self.parasitic_entries[(name, key)] = pent
 
-        # 3. Card panel: noise reference, device frequencies & save button
-        card = ttk.LabelFrame(lower_row, text=" Simulation Parameters ",
+        # 3. Simulation Parameters: noise reference, device frequencies
+        ttk.Separator(cards_row, orient="vertical").pack(side=tk.LEFT, fill="y")
+        card = ttk.LabelFrame(cards_row, text=" Simulation Parameters ",
                               padding=(10, 8))
         card.pack(side=tk.LEFT, anchor="n")
 
@@ -476,20 +604,20 @@ class CE102App(tk.Tk):
             row=0, column=0, columnspan=3, sticky="w", pady=(0, 6))
 
         ttk.Label(noise_frame, text="at 10 kHz:").grid(row=1, column=0, sticky="e", padx=(0, 4))
-        self.noise_10k_entry = ttk.Entry(noise_frame, width=8)
+        self.noise_10k_entry = ttk.Entry(noise_frame, width=6)
         self.noise_10k_entry.insert(0, str(self.noise_10k))
         self.noise_10k_entry.grid(row=1, column=1, sticky="w")
         self.noise_10k_entry.bind("<Return>", self._on_noise_edit)
         self.noise_10k_entry.bind("<FocusOut>", self._on_noise_edit)
 
         ttk.Label(noise_frame, text="at 10 MHz:").grid(row=2, column=0, sticky="e", padx=(0, 4), pady=(4,0))
-        self.noise_10m_entry = ttk.Entry(noise_frame, width=8)
+        self.noise_10m_entry = ttk.Entry(noise_frame, width=6)
         self.noise_10m_entry.insert(0, str(self.noise_10m))
         self.noise_10m_entry.grid(row=2, column=1, sticky="w", pady=(4,0))
         self.noise_10m_entry.bind("<Return>", self._on_noise_edit)
         self.noise_10m_entry.bind("<FocusOut>", self._on_noise_edit)
 
-        ttk.Separator(inner, orient="horizontal").pack(fill="x", pady=(0, 8))
+        ttk.Separator(inner, orient="horizontal").pack(fill="x", pady=(0, 6))
 
         # device frequency panel (below noise)
         dev_frame = ttk.Frame(inner)
@@ -500,51 +628,55 @@ class CE102App(tk.Tk):
             row=0, column=0, columnspan=6, sticky="w", pady=(0, 4))
 
         for i in range(NUM_DEVICES):
-            amp_entry = ttk.Entry(dev_frame, width=6, justify="center")
+            amp_entry = ttk.Entry(dev_frame, width=5, justify="center")
             amp_entry.insert(0, f"{self.device_amplitudes[i]:g}")
-            amp_entry.grid(row=i + 1, column=0, sticky="w", padx=(0, 4))
+            amp_entry.grid(row=i + 1, column=0, sticky="w", padx=(0, 3))
             amp_entry.bind("<Return>", lambda e, idx=i: self._on_device_amp_edit(idx))
             amp_entry.bind("<FocusOut>", lambda e, idx=i: self._on_device_amp_edit(idx))
             self.device_amp_entries.append(amp_entry)
             amp_label = ttk.Label(dev_frame, text="dBuV", anchor="e")
-            amp_label.grid(row=i + 1, column=1, sticky="w", padx=(0, 8))
+            amp_label.grid(row=i + 1, column=1, sticky="w", padx=(0, 6))
             self.device_amp_labels.append(amp_label)
             lbl = ttk.Label(dev_frame, text=f"{DEVICE_LABELS[i]}:", anchor="e")
-            lbl.grid(row=i + 1, column=2, sticky="e", padx=(0, 4))
-            freq_entry = ttk.Entry(dev_frame, width=8, justify="center")
+            lbl.grid(row=i + 1, column=2, sticky="e", padx=(0, 3))
+            freq_entry = ttk.Entry(dev_frame, width=6, justify="center")
             freq_entry.insert(0, f"{DEVICE_INIT_FREQS[i] / 1e3:g}")
             freq_entry.grid(row=i + 1, column=3, sticky="w", padx=(0, 3))
             freq_entry.bind("<Return>", lambda e, idx=i: self._on_device_freq_edit(idx))
             freq_entry.bind("<FocusOut>", lambda e, idx=i: self._on_device_freq_edit(idx))
             self.device_freq_entries.append(freq_entry)
             unit_label = ttk.Label(dev_frame, text="kHz", anchor="e")
-            unit_label.grid(row=i + 1, column=4, sticky="w", padx=(0, 8))
+            unit_label.grid(row=i + 1, column=4, sticky="w", padx=(0, 6))
             check_var = tk.BooleanVar(value=self.device_enabled[i])
             check = ttk.Checkbutton(dev_frame, text="Show", variable=check_var,
                                     command=lambda idx=i: self._on_device_check(idx))
             check.grid(row=i + 1, column=5, sticky="w")
             self.device_check_vars.append(check_var)
 
-        ttk.Separator(left_col, orient='horizontal').pack(fill='x', pady=12)
-
-        # Bottom button row of the left column
-        button_row = ttk.Frame(left_col)
-        button_row.pack(anchor="e")
+        # Bottom button row
+        button_row = ttk.Frame(left_panel)
+        button_row.pack(anchor="w", pady=(10, 0))
 
         self.reset_button = ttk.Button(button_row, text="Reset Defaults",
                                        command=self.reset_defaults, width=14)
         self.reset_button.pack(side=tk.LEFT, padx=(0, 8))
 
-        # Save button at the very bottom of the left column
         self.save_button = ttk.Button(button_row, text="Save Results",
                                       command=self.save_images, width=14)
         self.save_button.pack(side=tk.LEFT)
 
+        # Mouse wheel scrolls the left panel only while hovering it
+        def _on_mousewheel(event):
+            scroll_canvas.yview_scroll(-(event.delta // 120), "units")
+
+        scroll_canvas.bind("<Enter>",
+                           lambda e: scroll_canvas.bind_all("<MouseWheel>", _on_mousewheel))
+        scroll_canvas.bind("<Leave>", lambda e: scroll_canvas.unbind_all("<MouseWheel>"))
+
         # -------------------------------------------------------
-        # RIGHT COLUMN (Graph spanning full height) - card
+        # RIGHT COLUMN: the full-height graph card
         # -------------------------------------------------------
         right_col = ttk.Frame(outer)
-        # Expand=True ve fill=BOTH ile tüm yüksekliği doldurur
         right_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         plot_card = ttk.LabelFrame(right_col, text=" Filter Response (CE102, 10 kHz - 10 MHz) ",
@@ -643,6 +775,22 @@ class CE102App(tk.Tk):
         ent.insert(0, self._fmt_value(comp))
         self.recalculate()
 
+    def _on_parasitic_edit(self, name, key):
+        ent = self.parasitic_entries[(name, key)]
+        text = ent.get()
+        parsed = parse_parasitic(text, key)
+        if parsed is None:
+            messagebox.showwarning("Invalid value",
+                                   f"Could not parse {key} for {name}: '{text}'.\n"
+                                   "Expected a number in the unit shown in the column header.")
+            ent.delete(0, tk.END)
+            ent.insert(0, f"{COMPONENTS[name][key]:g}")
+            return
+        COMPONENTS[name][key] = parsed
+        ent.delete(0, tk.END)
+        ent.insert(0, f"{parsed:g}")
+        self.recalculate()
+
     def _on_noise_edit(self, event=None):
         try:
             v10k = float(self.noise_10k_entry.get().strip())
@@ -693,6 +841,11 @@ class CE102App(tk.Tk):
         self.device_enabled[index] = self.device_check_vars[index].get()
         self.recalculate()
 
+    def _on_parasitic_toggle(self):
+        global PARASITIC_EFFECT
+        PARASITIC_EFFECT = self.parasitic_check_var.get()
+        self.recalculate()
+
     @staticmethod
     def _harmonic_frequencies(freq, num=NUM_HARMONICS):
         if freq is None or freq <= 0:
@@ -701,11 +854,14 @@ class CE102App(tk.Tk):
 
     def reset_defaults(self):
         for name, comp in DEFAULTS.items():
-            COMPONENTS[name]["value"] = comp["value"]
-            COMPONENTS[name]["unit"] = comp["unit"]
+            COMPONENTS[name] = dict(comp)
             ent = self.entries[name]
             ent.delete(0, tk.END)
             ent.insert(0, self._fmt_value(COMPONENTS[name]))
+            for key in active_parasitics(COMPONENTS[name]):
+                pent = self.parasitic_entries[(name, key)]
+                pent.delete(0, tk.END)
+                pent.insert(0, f"{COMPONENTS[name][key]:g}")
         self.noise_10k, self.noise_10m = NOISE_SRC_AT_10K, NOISE_SRC_AT_10M
         self.noise_10k_entry.delete(0, tk.END)
         self.noise_10k_entry.insert(0, str(self.noise_10k))
@@ -726,13 +882,44 @@ class CE102App(tk.Tk):
 
     # ---------------------------------------------------------------
     def _build_plot(self):
-        # Increased figsize height slightly since it spans full right side
-        self.fig = Figure(figsize=(10.5, 7.5), dpi=100) 
+        # Initial figure size; once mapped, _on_plot_configure resizes it to
+        # fill the whole right column (widget keeps this requested size, so the
+        # packed layout is stable regardless of the actual canvas pixels).
+        self.fig = Figure(figsize=(7.4, 6.0), dpi=100)
         self.ax = self.fig.add_subplot(111)
         self.canvas_plot = FigureCanvasTkAgg(self.fig, master=self.plot_frame)
         self.canvas_plot.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        # add="+" keeps matplotlib's own <Configure> handler (resize -> draws
+        # at the fresh _tkcanvas width/height) in place; a plain bind() would
+        # REPLACE it and leave the internal size stale, so the figure got
+        # rendered only at its initial 740x600 px and the bottom never drew.
+        self.canvas_plot.get_tk_widget().bind("<Configure>", self._on_plot_configure, add="+")
         toolbar = NavigationToolbar2Tk(self.canvas_plot, self.plot_frame)
         toolbar.update()
+
+    def _on_plot_configure(self, event):
+        # Coalesce the Configure bursts that fire while the window is being
+        # resized/maximized; the actual resize is done once on idle, so the
+        # canvas always ends up at its final size (and never races a stale
+        # event while text-dragging the window). matplotlib's own handler has
+        # already run by now (registered before this one).
+        if getattr(self, "_plot_resize_pending", False):
+            return
+        self._plot_resize_pending = True
+        self.after_idle(self._resize_plot)
+
+    def _resize_plot(self):
+        self._plot_resize_pending = False
+        tkwin = self.canvas_plot.get_tk_widget()
+        w, h = tkwin.winfo_width(), tkwin.winfo_height()
+        if w < 60 or h < 60:
+            return
+        try:
+            self.fig.set_size_inches(w / self.fig.dpi, h / self.fig.dpi)
+            self.fig.tight_layout()
+            self.canvas_plot.draw_idle()
+        except Exception as e:
+            print(f"plot resize error: {e}", file=sys.stderr)
 
     def recalculate(self):
         try:
